@@ -1,0 +1,27 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Packaging artifacts
+*.egg-info/
+build/
+dist/
+
+# Virtual environment
+.venv/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Local editor settings
+.vscode/
+
+# OS noise
+.DS_Store

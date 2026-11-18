@@ -1,0 +1,27 @@
+[project]
+name = "example-web-app"
+version = "0.1.0"
+description = "web app boilerplate"
+authors = [
+    {name = "Wong Jiang Fung",email = "kakarukeys@gmail.com"}
+]
+requires-python = ">=3.14"
+dependencies = [
+    "streamlit (>=1.67.0,<2.0.0)"
+]
+
+[dependency-groups]
+dev = [
+    "ipython (>=9.18.1,<10.0.0)",
+    "flake8 (>=7.5.0,<8.0.0)",
+    "mypy (>=2.4.1,<3.0.0)",
+    "pydantic (>=2.14.3,<3.0.0)",
+    "pytest (>=9.2.0,<10.0.0)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
