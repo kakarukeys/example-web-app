@@ -1,0 +1,163 @@
+name: Test, Build and Publish Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AWS_REGION: ap-southeast-1
+  BUILD_ROLE_ARN: ${{ vars.BUILD_ROLE_ARN }}
+
+jobs:
+  checks:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - name: Lint
+            command: poetry run flake8 app tests
+          - name: Type check
+            command: poetry run mypy .
+          - name: Test
+            command: poetry run pytest -q
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install Python
+        id: install-python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1.4.2
+        with:
+          version: 2.5.1
+          virtualenvs-in-project: true
+
+      - name: Restore virtual environment from cache
+        uses: actions/cache@v6
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.install-python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install project dependencies
+        run: poetry install --no-interaction
+
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+  publish:
+    name: Build and publish
+    needs: checks
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      image_name: ${{ steps.metadata.outputs.image_name }}
+      image_tag: ${{ steps.metadata.outputs.image_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install Python
+        id: install-python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1.4.2
+        with:
+          version: 2.5.1
+
+      - name: Read image name and tag from the project
+        id: metadata
+        run: |
+          image_name=$(poetry version | cut -d' ' -f1)
+          image_tag=$(poetry version --short)-build${GITHUB_RUN_NUMBER}
+          printf 'image_name=%s\nimage_tag=%s\n' "$image_name" "$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.BUILD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: run-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and publish multi-arch docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.metadata.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ steps.metadata.outputs.image_name }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ steps.metadata.outputs.image_name }}:${{ steps.metadata.outputs.image_tag }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ steps.metadata.outputs.image_name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  post-build:
+    name: Tag release
+    needs: publish
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Tag the repository
+        run: |
+          set -euo pipefail
+          git_tag="v${IMAGE_TAG}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${git_tag}" >/dev/null 2>&1; then
+            echo "tag ${git_tag} already exists"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${git_tag}" -m "tagged by GHA ${git_tag}"
+          git push origin "${git_tag}"
