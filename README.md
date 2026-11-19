@@ -65,6 +65,25 @@ docker run --rm --read-only --publish 8501:8501 example-web-app:local
 
 `HOME=/tmp` exists only so that `$HOME` resolves to a readable path; nothing writes to it. If a later dependency needs a writable cache (e.g. matplotlib), point it at an explicit mount (`MPLCONFIGDIR`, `XDG_CACHE_HOME`) added to the task definition rather than relying on `HOME`.
 
+## Versioning
+
+The version has a single source of truth in the code: `version` under `[project]` in `pyproject.toml`. Nothing else stores it. The image name and tag, the `APP_VERSION` build argument and the `v<version>-build<run>` git tag are all derived from it at build time by CI (`poetry version --short`), so bumping is a one-line change in one file.
+
+Use Poetry, which rewrites `pyproject.toml`:
+
+```sh
+poetry version patch   # 0.1.0 -> 0.1.1
+poetry version minor   # 0.1.0 -> 0.2.0
+poetry version major   # 0.1.0 -> 1.0.0
+```
+
+Both of these are acceptable practices:
+
+* bump when the coders start to open a new chapter — the version marks the start of a body of work, and every image built along the way carries it;
+* bump when the coders are about to cut a new release — the version marks the finished increment, and the bump lands in the commit or pull request that prepares the release.
+
+Because image tags also include the CI run number (`<version>-build<run number>`), several builds of the same version remain distinct.
+
 ## Project Structure
 
 ```
