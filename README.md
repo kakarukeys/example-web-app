@@ -17,13 +17,22 @@ git clone git@github.com:kakarukeys/example-web-app.git
 cd example-web-app
 ```
 
-2. Install a python virtual environment
+2. Install the [dotenv plugin](https://github.com/pivoshenko/poetry-plugin-dotenv) and create your local env file
+
+```sh
+poetry self add poetry-plugin-dotenv@latest
+cp .env.example .env
+```
+
+`poetry-plugin-dotenv` loads `.env` from the project root (or any parent directory) into the environment before every `poetry` command, so `poetry run streamlit ...` sees the values without exporting anything by hand.
+
+3. Install a python virtual environment
 
 ```sh
 poetry install
 ```
 
-3. Start the streamlit app
+4. Start the streamlit app
 
 ```sh
 poetry run streamlit run app/app.py
@@ -62,6 +71,7 @@ docker run --rm --read-only --publish 8501:8501 example-web-app:local
 .
 ├── app/app.py                                  # Streamlit entry point (main(), get_app_version())
 ├── tests/test_app.py                           # Rendered-output test (AppTest)
+├── .env.example                                # Local environment template (copy to .env)
 ├── .flake8                                     # flake8 configuration
 ├── mypy.ini                                    # mypy configuration
 ├── pytest.ini                                  # pytest configuration
